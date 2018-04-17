@@ -48,6 +48,7 @@ func (mp MapAndEnqueue) Get(r workqueue.RateLimitingInterface) cache.ResourceEve
 	// Enqueue the mapped key for updates to the object
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
+			glog.V(4).Infof("add fn triggered %T", obj)
 			for _, p := range mp.Predicates {
 				if !p.HandleCreate(obj) {
 					return
@@ -56,6 +57,7 @@ func (mp MapAndEnqueue) Get(r workqueue.RateLimitingInterface) cache.ResourceEve
 			mp.addRateLimited(r, obj)
 		},
 		UpdateFunc: func(old, obj interface{}) {
+			glog.V(4).Infof("update fn triggered %T", obj)
 			for _, p := range mp.Predicates {
 				if !p.HandleUpdate(old, obj) {
 					return
@@ -64,6 +66,7 @@ func (mp MapAndEnqueue) Get(r workqueue.RateLimitingInterface) cache.ResourceEve
 			mp.addRateLimited(r, obj)
 		},
 		DeleteFunc: func(obj interface{}) {
+			glog.V(4).Infof("delete fn triggered %T", obj)
 			for _, p := range mp.Predicates {
 				if !p.HandleDelete(obj) {
 					return
@@ -118,29 +121,32 @@ func (m MapToController) Map(obj interface{}) string {
 	o := object
 	for len(m.Path) > 0 {
 		// Get the owner reference
-		if ownerRef := metav1.GetControllerOf(o); ownerRef != nil {
-			// Resolve the owner object and check if the UID of the looked up object matches the reference.
-			owner, err := m.Path[0](types.ReconcileKey{Name: ownerRef.Name, Namespace: o.GetNamespace()})
-			if err != nil || owner == nil {
-				glog.V(2).Infof("Could not lookup owner %v %v", owner, err)
-				return ""
-			}
-			var ownerObject metav1.Object
-			if ownerObject, ok = owner.(metav1.Object); !ok {
-				glog.V(2).Infof("No ObjectMeta for owner %v %v", owner, err)
-				return ""
-			}
-			if ownerObject.GetUID() != ownerRef.UID {
-				return ""
-			}
+		ownerRef := metav1.GetControllerOf(o)
+		if ownerRef == nil {
+			glog.V(2).Infof("found object %v with no owner reference", o)
+			return ""
+		}
+		// Resolve the owner object and check if the UID of the looked up object matches the reference.
+		owner, err := m.Path[0](types.ReconcileKey{Name: ownerRef.Name, Namespace: o.GetNamespace()})
+		if err != nil || owner == nil {
+			glog.V(2).Infof("Could not lookup owner %v %v", owner, err)
+			return ""
+		}
+		var ownerObject metav1.Object
+		if ownerObject, ok = owner.(metav1.Object); !ok {
+			glog.V(2).Infof("No ObjectMeta for owner %v %v", owner, err)
+			return ""
+		}
+		if ownerObject.GetUID() != ownerRef.UID {
+			return ""
+		}
 
-			// Pop the path element or return the value
-			if len(m.Path) > 1 {
-				o = ownerObject
-				m.Path = m.Path[1:]
-			} else {
-				return object.GetNamespace() + "/" + ownerRef.Name
-			}
+		// Pop the path element or return the value
+		if len(m.Path) > 1 {
+			o = ownerObject
+			m.Path = m.Path[1:]
+		} else {
+			return object.GetNamespace() + "/" + ownerRef.Name
 		}
 	}
 	return ""

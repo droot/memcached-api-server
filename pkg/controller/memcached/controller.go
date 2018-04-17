@@ -29,7 +29,6 @@ import (
 
 func (bc *MemcachedController) Reconcile(k types.ReconcileKey) error {
 
-	log.Printf("reconciling key: %+v", k)
 	mc, err := bc.memcachedLister.Memcacheds(k.Namespace).Get(k.Name)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -73,6 +72,8 @@ func (bc *MemcachedController) Reconcile(k types.ReconcileKey) error {
 		return fmt.Errorf("failed to list pods: %v", err)
 	}
 	podNames := getPodNames(pods)
+
+	log.Printf("got the pods names: %v", podNames)
 
 	err = bc.updateMemcachedStatus(mc, podNames)
 	if err != nil {
@@ -128,8 +129,6 @@ func ProvideController(arguments args.InjectArgs) (*controller.GenericController
 		return gc, err
 	}
 
-	// INSERT ADDITIONAL WATCHES HERE BY CALLING gc.Watch.*() FUNCTIONS
-	// NOTE: Informers for Kubernetes resources *MUST* be registered in the pkg/inject package so that they are started.
 	return gc, nil
 }
 
